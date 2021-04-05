@@ -97,18 +97,19 @@ def get_node_set(mesh, key):
     return node_set
 
 
-def get_cell_node_list(mesh, entity_dofs, global_numbering, offsets):
+def get_cell_node_list(mesh, entity_dofs, entity_permutations, global_numbering, offsets):
     """Get the cell->node list for specified dof layout.
 
     :arg mesh: The mesh to use.
     :arg entity_dofs: The FInAT entity_dofs dict.
+    :arg entity_permutations: The FInAT entity_permutations dict.
     :arg global_numbering: The PETSc Section describing node layout
         (see :func:`get_global_numbering`).
     :arg offsets: layer offsets for each entity (maybe ignored).
     :returns: A numpy array mapping mesh cells to function space
         nodes.
     """
-    return mesh.make_cell_node_list(global_numbering, entity_dofs, offsets)
+    return mesh.make_cell_node_list(global_numbering, entity_dofs, entity_permutations, offsets)
 
 
 def get_facet_node_list(mesh, kind, cell_node_list, offsets):
@@ -131,12 +132,13 @@ def get_facet_node_list(mesh, kind, cell_node_list, offsets):
 
 
 @cached
-def get_entity_node_lists(mesh, key, entity_dofs, global_numbering, offsets):
+def get_entity_node_lists(mesh, key, entity_dofs, entity_permutations, global_numbering, offsets):
     """Get the map from mesh entity sets to function space nodes.
 
     :arg mesh: The mesh to use.
-    :arg key: a (entity_dofs, real_tensorproduct) tuple.
+    :arg key: a (entity_dofs_key, real_tensorproduct, entity_permutations_key) tuple.
     :arg entity_dofs: FInAT entity dofs.
+    :arg entity_permutations: FInAT entity permutations.
     :arg global_numbering: The PETSc Section describing node layout
         (see :func:`get_global_numbering`).
     :arg offsets: layer offsets for each entity (maybe ignored).
@@ -144,7 +146,7 @@ def get_entity_node_lists(mesh, key, entity_dofs, global_numbering, offsets):
         function space nodes.
     """
     # set->node lists are specific to the sorted entity_dofs.
-    cell_node_list = get_cell_node_list(mesh, entity_dofs, global_numbering, offsets)
+    cell_node_list = get_cell_node_list(mesh, entity_dofs, entity_permutations, global_numbering, offsets)
     interior_facet_node_list = partial(get_facet_node_list, mesh, "interior_facets", cell_node_list, offsets)
     exterior_facet_node_list = partial(get_facet_node_list, mesh, "exterior_facets", cell_node_list, offsets)
 
@@ -167,7 +169,7 @@ def get_map_cache(mesh, key):
     """Get the map cache for this mesh.
 
     :arg mesh: The mesh to use.
-    :arg key: a (entity_dofs, real_tensorproduct) tuple where
+    :arg key: a (entity_dofs_key, real_tensorproduct, entity_permutations_key) tuple where
         entity_dofs is Canonicalised entity_dofs (see :func:`entity_dofs_key`);
         real_tensorproduct is True if the function space is a degenerate
         fs x Real tensorproduct.
@@ -369,6 +371,26 @@ def entity_dofs_key(entity_dofs):
     return key
 
 
+def entity_permutations_key(entity_permutations):
+    """Provide a canonical key for an entity_permutations dict.
+
+    :arg entity_permutations: The FInAT entity_permutations.
+    :returns: A tuple of canonicalised entity_permutations (suitable for
+        caching).
+    """
+    key = []
+    for k in sorted(entity_permutations.keys()):
+        sub_key = [k]
+        for sk in sorted(entity_permutations[k]):
+            subsub_key = [sk]
+            for ssk in sorted(entity_permutations[k][sk]):
+                subsub_key.append((ssk, tuple(entity_permutations[k][sk][ssk])))
+            sub_key.append(tuple(subsub_key))
+        key.append(tuple(sub_key))
+    key = tuple(key)
+    return key
+
+
 class FunctionSpaceData(object):
     """Function spaces with the same entity dofs share data.  This class
     stores that shared data.  It is cached on the mesh.
@@ -386,7 +408,10 @@ class FunctionSpaceData(object):
     def __init__(self, mesh, finat_element, real_tensorproduct=False):
         entity_dofs = finat_element.entity_dofs()
         nodes_per_entity = tuple(mesh.make_dofs_per_plex_entity(entity_dofs))
-
+        try:
+            entity_permutations = finat_element.entity_permutations
+        except NotImplementedError:
+            entity_permutations = None
         # Create the PetscSection mapping topological entities to functionspace nodes
         # For non-scalar valued function spaces, there are multiple dofs per node.
 
@@ -395,14 +420,16 @@ class FunctionSpaceData(object):
         node_set = get_node_set(mesh, (nodes_per_entity, real_tensorproduct))
 
         edofs_key = entity_dofs_key(entity_dofs)
+        # entity_permutations is None if not yet implemented
+        eperm_key = entity_permutations_key(entity_permutations) if entity_permutations else None
 
         # Empty map caches. This is a sui generis cache
         # implementation because of the need to support boundary
         # conditions.
         # Map caches are specific to a cell_node_list, which is keyed by entity_dof
-        self.map_cache = get_map_cache(mesh, (edofs_key, real_tensorproduct))
+        self.map_cache = get_map_cache(mesh, (edofs_key, real_tensorproduct, eperm_key))
         self.offset = get_dof_offset(mesh, (edofs_key, real_tensorproduct), entity_dofs, finat_element.space_dimension())
-        self.entity_node_lists = get_entity_node_lists(mesh, (edofs_key, real_tensorproduct), entity_dofs, global_numbering, self.offset)
+        self.entity_node_lists = get_entity_node_lists(mesh, (edofs_key, real_tensorproduct, eperm_key), entity_dofs, entity_permutations, global_numbering, self.offset)
         self.node_set = node_set
         self.cell_boundary_masks = get_boundary_masks(mesh, (edofs_key, "cell"), finat_element)
         self.interior_facet_boundary_masks = get_boundary_masks(mesh, (edofs_key, "interior_facet"), finat_element)
