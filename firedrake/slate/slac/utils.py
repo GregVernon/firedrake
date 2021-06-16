@@ -6,7 +6,7 @@ from collections import OrderedDict
 from ufl.algorithms.multifunction import MultiFunction
 
 from gem import (Literal, Sum, Product, Indexed, ComponentTensor, IndexSum,
-                 Solve, Inverse, Variable, view)
+                 Solve, Inverse, Variable)
 from gem import indices as make_indices
 from gem.node import Memoizer
 from gem.node import pre_traversal as traverse_dags
@@ -167,6 +167,7 @@ def _slate2gem(expr, self):
 
 @_slate2gem.register(sl.Tensor)
 @_slate2gem.register(sl.AssembledVector)
+@_slate2gem.register(sl.Block)
 def _slate2gem_tensor(expr, self):
     shape = expr.shape if not len(expr.shape) == 0 else (1, )
     name = f"T{len(self.var2terminal)}"
@@ -174,15 +175,6 @@ def _slate2gem_tensor(expr, self):
     var = Variable(name, shape)
     self.var2terminal[var] = expr
     return var
-
-
-@_slate2gem.register(sl.Block)
-def _slate2gem_block(expr, self):
-    child, = map(self, expr.children)
-    child_shapes = expr.children[0].shapes
-    offsets = tuple(sum(shape[:idx]) for shape, (idx, *_)
-                    in zip(child_shapes.values(), expr._indices))
-    return view(child, *(slice(idx, idx+extent) for idx, extent in zip(offsets, expr.shape)))
 
 
 @_slate2gem.register(sl.Inverse)
@@ -290,7 +282,7 @@ def merge_loopy(slate_loopy, output_arg, builder, var2terminal, name):
     # In the initialisation the loopy tensors for the terminals are generated
     # Those are the needed again for generating the TSFC calls
     inits, tensor2temp = builder.initialise_terminals(var2terminal, builder.bag.coefficients)
-    terminal_tensors = list(filter(lambda x: isinstance(x, sl.Tensor), var2terminal.values()))
+    terminal_tensors = list(filter(lambda x: (x.terminal and x.rank > 1), var2terminal.values()))
     tsfc_calls, tsfc_kernels = zip(*itertools.chain.from_iterable(
                                    (builder.generate_tsfc_calls(terminal, tensor2temp[terminal])
                                     for terminal in terminal_tensors)))
