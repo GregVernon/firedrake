@@ -5,6 +5,7 @@ from coffee import base as ast
 from collections import OrderedDict, Counter, namedtuple
 
 from firedrake.slate.slac.utils import traverse_dags, Transformer
+from firedrake.slate.slate import AssembledVector, Block
 from firedrake.utils import cached_property
 
 from tsfc.finatinterface import create_element
@@ -599,7 +600,7 @@ class LocalLoopyKernelBuilder(object):
         inits = []
         for gem_tensor, slate_tensor in var2terminal.items():
             assert slate_tensor.terminal, "Only terminal tensors need to be initiliased in Slate kernels."
-
+            tensor = slate_tensor if not isinstance(slate_tensor, Block) else slate_tensor.tensor
             (_, dtype), = assign_dtypes([gem_tensor], self.tsfc_parameters["scalar_type"])
             loopy_tensor = loopy.TemporaryVariable(gem_tensor.name,
                                                    dtype=dtype,
@@ -607,14 +608,14 @@ class LocalLoopyKernelBuilder(object):
                                                    address_space=loopy.AddressSpace.LOCAL)
             tensor2temp[slate_tensor] = loopy_tensor
 
-            if slate_tensor.rank > 1:
+            if not isinstance(tensor, AssembledVector):
                 indices = self.bag.index_creator(self.shape(slate_tensor))
                 inames = {var.name for var in indices}
                 var = pym.Subscript(pym.Variable(loopy_tensor.name), indices)
                 inits.append(loopy.Assignment(var, "0.", id="init%d" % len(inits),
                                               within_inames=frozenset(inames)))
 
-            elif slate_tensor.rank <= 1:
+            else:
                 f = slate_tensor.form if isinstance(slate_tensor.form, tuple) else (slate_tensor.form,)
                 coeff = tuple(coefficients[c] for c in f)
                 offset = 0

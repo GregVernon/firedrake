@@ -282,7 +282,7 @@ def merge_loopy(slate_loopy, output_arg, builder, var2terminal, name):
     # In the initialisation the loopy tensors for the terminals are generated
     # Those are the needed again for generating the TSFC calls
     inits, tensor2temp = builder.initialise_terminals(var2terminal, builder.bag.coefficients)
-    terminal_tensors = list(filter(lambda x: (x.terminal and x.rank > 1), var2terminal.values()))
+    terminal_tensors = list(filter(lambda x: (x.terminal and not isinstance(x, sl.AssembledVector)), var2terminal.values()))
     tsfc_calls, tsfc_kernels = zip(*itertools.chain.from_iterable(
                                    (builder.generate_tsfc_calls(terminal, tensor2temp[terminal])
                                     for terminal in terminal_tensors)))
