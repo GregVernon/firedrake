@@ -34,6 +34,8 @@ from ufl.domain import join_domains
 from ufl.form import Form
 import hashlib
 
+from firedrake.formmanipulation import ExtractSubBlock
+
 
 __all__ = ['AssembledVector', 'Block', 'Factorization', 'Tensor',
            'Inverse', 'Transpose', 'Negative',
@@ -404,6 +406,10 @@ class AssembledVector(TensorBase):
         return True
 
     @cached_property
+    def form(self):
+        return self._function
+
+    @cached_property
     def arg_function_spaces(self):
         """Returns a tuple of function spaces that the tensor
         is defined on.
@@ -569,6 +575,14 @@ class Block(TensorBase):
     def arguments(self):
         """Returns a tuple of arguments associated with the tensor."""
         return self._split_arguments
+
+    @cached_property
+    def form(self):
+        tensor, = self.operands
+        if tensor.rank > 1:
+            return ExtractSubBlock().split(tensor.form, self._indices)
+        elif tensor.rank <= 1:
+            return tuple(tensor._function.split()[i] for j in self._indices for i in j)
 
     def coefficients(self):
         """Returns a tuple of coefficients associated with the tensor."""
