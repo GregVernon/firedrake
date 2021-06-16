@@ -123,6 +123,11 @@ class TensorBase(object, metaclass=ABCMeta):
         self._cache = {}
 
     @cached_property
+    def terminal(self):
+        """Returns False unless the node is a terminal node."""
+        return False
+
+    @cached_property
     def id(self):
         return next(TensorBase._id)
 
@@ -394,6 +399,11 @@ class AssembledVector(TensorBase):
                             type(function))
 
     @cached_property
+    def terminal(self):
+        """Returns False unless the node is a terminal node."""
+        return True
+
+    @cached_property
     def arg_function_spaces(self):
         """Returns a tuple of function spaces that the tensor
         is defined on.
@@ -495,6 +505,8 @@ class Block(TensorBase):
     """
 
     def __new__(cls, tensor, indices):
+        assert tensor.terminal, "Slate can only express Blocks on terminal tensors."
+
         if not isinstance(tensor, TensorBase):
             raise TypeError("Can only extract blocks of Slate tensors.")
 
@@ -516,6 +528,11 @@ class Block(TensorBase):
         self.operands = (tensor,)
         self._blocks = dict(enumerate(indices))
         self._indices = indices
+
+    @cached_property
+    def terminal(self):
+        """Returns False unless the node is a terminal node."""
+        return True
 
     @cached_property
     def _split_arguments(self):
@@ -717,6 +734,11 @@ class Tensor(TensorBase):
         super(Tensor, self).__init__()
 
         self.form = form
+
+    @cached_property
+    def terminal(self):
+        """Returns False unless the node is a terminal node."""
+        return True
 
     @cached_property
     def arg_function_spaces(self):
