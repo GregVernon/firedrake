@@ -574,7 +574,7 @@ class Block(TensorBase):
         if tensor.rank > 1:
             return ExtractSubBlock().split(tensor.form, self._indices)
         elif tensor.rank <= 1:
-            return tuple(tensor._function.split()[i] for j in self._indices for i in j)
+            return tuple(tensor._function.split()[i] for i in chain(*self._indices))
 
     def coefficients(self):
         """Returns a tuple of coefficients associated with the tensor."""
