@@ -21,8 +21,11 @@ from hashlib import md5
 
 from firedrake_citations import Citations
 from firedrake.tsfc_interface import SplitKernel, KernelInfo, TSFCKernel
+
 from firedrake.slate.slac.kernel_builder import LocalLoopyKernelBuilder, LocalKernelBuilder
 from firedrake.slate.slac.utils import topological_sort, slate_to_gem, merge_loopy
+from firedrake.slate.slac.optimise import optimise
+
 from firedrake import op2
 from firedrake.logging import logger
 from firedrake.parameters import parameters
@@ -151,6 +154,10 @@ def generate_loopy_kernel(slate_expr, tsfc_parameters=None):
         raise NotImplementedError("Multiple domains not implemented.")
 
     Citations().register("Gibson2018")
+
+    # Optimise slate expr, e.g. push blocks as far inward as possible
+    if tsfc_parameters["optimise_slate"]:
+        slate_expr = optimise(slate_expr)
 
     # Create a loopy builder for the Slate expression,
     # e.g. contains the loopy kernels coming from TSFC
