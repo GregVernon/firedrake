@@ -579,10 +579,14 @@ class Block(TensorBase):
 
     def coefficients(self):
         """Returns a tuple of coefficients associated with the tensor."""
-        if self.rank > 1:
-            return self.form.coefficients()
+        if self.terminal:
+            if self.rank > 1:
+                return self.form.coefficients()
+            else:
+                return self.form
         else:
-            return self.form
+            tensor, = self.operands
+            return tensor.coefficients()
 
     def ufl_domains(self):
         """Returns the integration domains of the integrals associated with
