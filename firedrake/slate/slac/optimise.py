@@ -1,4 +1,4 @@
-from gem.node import Memoizer
+from gem.node import MemoizerArg
 from functools import singledispatch
 from contextlib import contextmanager
 import firedrake.slate.slate as sl
@@ -9,81 +9,52 @@ def optimise(expression):
 
 
 def push_block(expression):
-    mapper = Memoizer(_push_block)
-    mapper.block = None
-    ret = mapper(expression)
+    mapper = MemoizerArg(_push_block)
+    ret = mapper(expression, ())
     return ret
 
 
 @singledispatch
-def _push_block(expr, self):
+def _push_block(expr, self, indices):
     raise AssertionError("Cannot handle terminal type: %s" % type(expr))
 
 
 @_push_block.register(sl.Transpose)
-def _push_block_transpose(expr, self):
-    if self.block:
-        with block(self, *expr.children, self.block._indices[::-1]):
-            ret = sl.Transpose(self(*expr.children))
-    else:
-        ret = expr
-    return ret
+def _push_block_transpose(expr, self, indices):
+    return sl.Transpose(map(self, expr.children, indices[::-1])) if indices else expr
 
 
 @_push_block.register(sl.Add)
-def _push_block_add(expr, self):
-    if self.block:
-        ops = []
-        for op in expr.children:
-            with block(self, op, self.block._indices):
-                ops += [self(op)]
-        ret = sl.Add(*ops)
-    else:
-        ret = expr
-    return ret
+def _push_block_add(expr, self, indices):
+    return sl.Add(map(self, expr.children, indices)) if indices else expr
 
 
 @_push_block.register(sl.Negative)
-def _push_block_neg(expr, self):
-    if self.block:
-        with block(self, *expr.operands, self.block._indices):
-            ret = sl.Negative(self(*expr.children))
-    else:
-        ret = expr
-    return ret
+def _push_block_neg(expr, self, indices):
+    return sl.Negative(map(self, expr.children, indices)) if indices else expr
 
 
 @_push_block.register(sl.Factorization)
 @_push_block.register(sl.Inverse)
 @_push_block.register(sl.Solve)
 @_push_block.register(sl.Mul)
-def _push_block_stop(expr, self):
-    return sl.Block(expr, self.block._indices) if self.block else expr
+def _push_block_stop(expr, self, indices):
+    return sl.Block(expr, indices) if self.block else expr
 
 
 @_push_block.register(sl.AssembledVector)
 @_push_block.register(sl.Tensor)
-def _push_block_terminal(expr, self):
+def _push_block_terminal(expr, self, indices):
     # FIXME
     assert not isinstance(expr, sl.AssembledVector), "If we do it like this we do need \
                                                  to be able to glue bit of functions back together"
-    return type(expr)(self.block.form) if self.block else expr
+    return type(expr)(self.block.form) if indices else expr
 
 
 @_push_block.register(sl.Block)
-def _push_block_block(expr, self):
-    if self.block:
+def _push_block_block(expr, self, indices):
+    if indices:
         self.block = sl.Block(*expr.children, tuple(big[slice(*small)] for small, big in zip(expr._indices, self.block._indices)))
     else:
         self.block = expr
-    return self(*expr.children)
-
-
-@contextmanager
-def block(self, tensor, indices):
-    """Provides a context to push blocks inside an expression.
-    :arg tensor: tensor of which block is taken of.
-    :arg indices: indices to a block of a tensor.
-    :returns: the modified code generation context."""
-    self.block = sl.Block(tensor, indices)
-    yield self
+    return self(*expr.children, indices)
