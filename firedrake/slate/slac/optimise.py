@@ -73,7 +73,7 @@ def _push_block_terminal(expr, self):
 @_push_block.register(sl.Block)
 def _push_block_block(expr, self):
     if self.block:
-        self.block = sl.Block(*expr.children, tuple(big[slice(*small)] for small, big in zip(expr._indices,self.block._indices)))
+        self.block = sl.Block(*expr.children, tuple(big[slice(*small)] for small, big in zip(expr._indices, self.block._indices)))
     else:
         self.block = expr
     return self(*expr.children)
