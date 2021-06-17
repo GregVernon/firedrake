@@ -115,6 +115,8 @@ class TensorBase(object, metaclass=ABCMeta):
     """A mock object that provides enough compatibility with ufl.Form
     that one can assemble a tensor."""
 
+    terminal = False
+
     _id = count()
 
     def __init__(self, *_):
@@ -123,11 +125,6 @@ class TensorBase(object, metaclass=ABCMeta):
         Mirrors :class:`~ufl.form.Form`.
         """
         self._cache = {}
-
-    @cached_property
-    def terminal(self):
-        """Returns False unless the node is a terminal node."""
-        return False
 
     @cached_property
     def id(self):
@@ -388,6 +385,7 @@ class AssembledVector(TensorBase):
         raise ValueError("AssembledVector has no integrals")
 
     operands = ()
+    terminal = True
 
     def __new__(cls, function):
         if isinstance(function, AssembledVector):
@@ -399,11 +397,6 @@ class AssembledVector(TensorBase):
         else:
             raise TypeError("Expecting a Coefficient or AssembledVector (not a %r)" %
                             type(function))
-
-    @cached_property
-    def terminal(self):
-        """Returns False unless the node is a terminal node."""
-        return True
 
     @cached_property
     def form(self):
@@ -731,6 +724,7 @@ class Tensor(TensorBase):
     """
 
     operands = ()
+    terminal = True
 
     def __init__(self, form):
         """Constructor for the Tensor class."""
@@ -749,11 +743,6 @@ class Tensor(TensorBase):
         super(Tensor, self).__init__()
 
         self.form = form
-
-    @cached_property
-    def terminal(self):
-        """Returns False unless the node is a terminal node."""
-        return True
 
     @cached_property
     def arg_function_spaces(self):
