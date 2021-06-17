@@ -529,8 +529,9 @@ class Block(TensorBase):
 
     @cached_property
     def terminal(self):
-        """Returns False unless the node is a terminal node."""
-        return True
+        """Blocks are only terminal when they sit on Tensors or AssembledVectors"""
+        tensor, = self.operands
+        return tensor.terminal
 
     @cached_property
     def _split_arguments(self):
