@@ -760,12 +760,14 @@ def git_update(name, url=None):
         git_sha = check_output(["git", "rev-parse", "HEAD"])
         # Ensure remotes get updated if and when we move repositories.
         if url:
-            plain_url = split_requirements_url(url)[1]
+            _, plain_url, branch = split_requirements_url(url)
             current_url = check_output(["git", "remote", "-v"]).split()[1]
             protocol = "https" if current_url.startswith("https") else "ssh"
             new_url = git_url(plain_url, protocol)
             # Ensure we only change from bitbucket to github and not the reverse.
-            if new_url != current_url and "bitbucket.org" in current_url \
+            if new_url != current_url \
+               and ("bitbucket.org" in current_url or 
+                   (name == "loopy" and branch == "firedrake")) \
                and ("github.com/firedrakeproject" in plain_url
                     or "github.com/dolfin-adjoint" in plain_url):
                 log.info("Updating git remote for %s" % name)
