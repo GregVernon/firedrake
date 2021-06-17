@@ -511,7 +511,6 @@ class Block(TensorBase):
     """
 
     def __new__(cls, tensor, indices):
-        assert tensor.terminal, "Slate can only express Blocks on terminal tensors."
 
         if not isinstance(tensor, TensorBase):
             raise TypeError("Can only extract blocks of Slate tensors.")
