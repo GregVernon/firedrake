@@ -6,7 +6,7 @@ from collections import OrderedDict
 from ufl.algorithms.multifunction import MultiFunction
 
 from gem import (Literal, Sum, Product, Indexed, ComponentTensor, IndexSum,
-                 Solve, Inverse, Variable)
+                 Solve, Inverse, Variable, view)
 from gem import indices as make_indices
 from gem.node import Memoizer
 from gem.node import pre_traversal as traverse_dags
@@ -167,7 +167,6 @@ def _slate2gem(expr, self):
 
 @_slate2gem.register(sl.Tensor)
 @_slate2gem.register(sl.AssembledVector)
-@_slate2gem.register(sl.Block)
 def _slate2gem_tensor(expr, self):
     shape = expr.shape if not len(expr.shape) == 0 else (1, )
     name = f"T{len(self.var2terminal)}"
@@ -175,6 +174,15 @@ def _slate2gem_tensor(expr, self):
     var = Variable(name, shape)
     self.var2terminal[var] = expr
     return var
+
+
+@_slate2gem.register(sl.Block)
+def _slate2gem_block(expr, self):
+    child, = map(self, expr.children)
+    child_shapes = expr.children[0].shapes
+    offsets = tuple(sum(shape[:idx]) for shape, (idx, *_)
+                    in zip(child_shapes.values(), expr._indices))
+    return view(child, *(slice(idx, idx+extent) for idx, extent in zip(offsets, expr.shape)))
 
 
 @_slate2gem.register(sl.Inverse)
