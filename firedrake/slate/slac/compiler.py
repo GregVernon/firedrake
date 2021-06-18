@@ -83,18 +83,18 @@ cell_to_facets_dtype = np.dtype(np.int8)
 
 class SlateKernel(TSFCKernel):
     @classmethod
-    def _cache_key(cls, expr, tsfc_parameters, coffee):
+    def _cache_key(cls, expr, compiler_parameters, coffee):
         return md5((expr.expression_hash
-                    + str(sorted(tsfc_parameters.items()))
+                    + str(sorted(compiler_parameters.items()))
                     + str(coffee)).encode()).hexdigest(), expr.ufl_domains()[0].comm
 
-    def __init__(self, expr, tsfc_parameters, coffee=False):
+    def __init__(self, expr, compiler_parameters, coffee=False):
         if self._initialized:
             return
         if coffee:
-            self.split_kernel = generate_kernel(expr, tsfc_parameters)
+            self.split_kernel = generate_kernel(expr, compiler_parameters)
         else:
-            self.split_kernel = generate_loopy_kernel(expr, tsfc_parameters)
+            self.split_kernel = generate_loopy_kernel(expr, compiler_parameters)
         self._initialized = True
 
 
@@ -103,7 +103,7 @@ def compile_expression(slate_expr, tsfc_parameters=None, coffee=False):
     :class:`firedrake.op2.Kernel` object representing the Slate expression.
 
     :arg slate_expr: a :class:'TensorBase' expression.
-    :arg tsfc_parameters: an optional `dict` of form compiler parameters to
+    :arg parameters: an optional `dict` of form compiler parameters to
         be passed to TSFC during the compilation of ufl forms.
 
     Returns: A `tuple` containing a `SplitKernel(idx, kinfo)`
@@ -117,14 +117,14 @@ def compile_expression(slate_expr, tsfc_parameters=None, coffee=False):
     # simply reuse the produced kernel.
     cache = slate_expr._metakernel_cache
     params = parameters["form_compiler"].copy()
-    if tsfc_parameters is not None:
+    params.update(parameters["la_compiler"].copy())
+    if tsfc_parameters is not None:  # tsfc_parameters actually contains all compiler parameters
         params.update(tsfc_parameters)
-    tsfc_parameters = params
-    key = str(sorted(tsfc_parameters.items()))
+    key = str(sorted(params.items()))
     try:
         return cache[key]
     except KeyError:
-        kernel = SlateKernel(slate_expr, tsfc_parameters, coffee).split_kernel
+        kernel = SlateKernel(slate_expr, params, coffee).split_kernel
         return cache.setdefault(key, kernel)
 
 
@@ -148,7 +148,7 @@ def get_temp_info(loopy_kernel):
     return mem_total, num_temps, mems, shapes
 
 
-def generate_loopy_kernel(slate_expr, tsfc_parameters=None):
+def generate_loopy_kernel(slate_expr, compiler_parameters=None):
     cpu_time = time.time()
     if len(slate_expr.ufl_domains()) > 1:
         raise NotImplementedError("Multiple domains not implemented.")
@@ -156,18 +156,18 @@ def generate_loopy_kernel(slate_expr, tsfc_parameters=None):
     Citations().register("Gibson2018")
 
     # Optimise slate expr, e.g. push blocks as far inward as possible
-    if tsfc_parameters["optimise_slate"]:
+    if compiler_parameters["optimise_slate"]:
         slate_expr = optimise(slate_expr)
 
     # Create a loopy builder for the Slate expression,
     # e.g. contains the loopy kernels coming from TSFC
     gem_expr, var2terminal = slate_to_gem(slate_expr)
 
-    scalar_type = tsfc_parameters["scalar_type"]
+    scalar_type = compiler_parameters["scalar_type"]
     slate_loopy, output_arg = gem_to_loopy(gem_expr, var2terminal, scalar_type)
 
     builder = LocalLoopyKernelBuilder(expression=slate_expr,
-                                      tsfc_parameters=tsfc_parameters)
+                                      tsfc_parameters=compiler_parameters)
 
     name = "slate_wrapper"
     loopy_merged = merge_loopy(slate_loopy, output_arg, builder, var2terminal, name)

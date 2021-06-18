@@ -87,6 +87,9 @@ parameters["default_sub_matrix_type"] = "baij"
 
 parameters["type_check_safe_par_loops"] = False
 
+parameters.add(Parameters("la_compiler"))
+parameters["la_compiler"]["optimise_slate"] = True
+
 
 def disable_performance_optimisations():
     """Switches off performance optimisations in Firedrake.
