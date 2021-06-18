@@ -42,13 +42,14 @@ def _push_block_stop(expr, self, indices):
     return sl.Block(expr, indices) if self.block else expr
 
 
-@_push_block.register(sl.AssembledVector)
 @_push_block.register(sl.Tensor)
 def _push_block_terminal(expr, self, indices):
-    # FIXME
-    assert not isinstance(expr, sl.AssembledVector), "If we do it like this we do need \
-                                                 to be able to glue bit of functions back together"
-    return type(expr)(self.block.form) if indices else expr
+   return sl.Tensor(self.block.form) if indices else expr
+
+
+@_push_block.register(sl.AssembledVector)
+def _push_block_terminal(expr, self, indices):
+   return sl.BlockAssembledVector(self.block.form) if indices else expr
 
 
 @_push_block.register(sl.Block)
