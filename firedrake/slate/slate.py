@@ -116,6 +116,7 @@ class TensorBase(object, metaclass=ABCMeta):
     that one can assemble a tensor."""
 
     terminal = False
+    assembled = False
 
     _id = count()
 
@@ -187,7 +188,7 @@ class TensorBase(object, metaclass=ABCMeta):
         """Computes the shape information of the local tensor."""
         return tuple(sum(shapelist) for shapelist in self.shapes.values())
 
-    @cached_property
+    @property
     def rank(self):
         """Returns the rank information of the tensor object."""
         return len(self.arguments())
@@ -386,6 +387,7 @@ class AssembledVector(TensorBase):
 
     operands = ()
     terminal = True
+    assembled = True
 
     def __new__(cls, function):
         if isinstance(function, AssembledVector):
@@ -436,6 +438,80 @@ class AssembledVector(TensorBase):
         ``{domain:{integral_type: subdomain_data}}``.
         """
         return {self.ufl_domain(): {"cell": None}}
+
+    def _output_string(self, prec=None):
+        """Creates a string representation of the tensor."""
+        return "AV_%d" % self.id
+
+    def __repr__(self):
+        """Slate representation of the tensor object."""
+        return "AssembledVector(%r)" % self._function
+
+    @cached_property
+    def _key(self):
+        """Returns a key for hash and equality."""
+        return (type(self), self._function)
+
+
+class BlockAssembledVector(TensorBase):
+    """This class is a symbolic representation of an assembled
+    vector of data contained in a :class:`firedrake.Function`
+    or a set of :class:`firedrake.Function`s
+    defined on pieces of a split mixed function space.
+
+    :arg functions: A tuple offiredrake functions.
+    """
+
+    operands = ()
+    terminal = True
+    assembled = True
+
+    def __new__(cls, functions):
+        if (isinstance(functions, tuple)
+            and all(isinstance(f, Coefficient) for f in functions)):
+            self = super().__new__(cls)
+            self._function = tuple(f for f in functions)
+            return self
+        else:
+            raise TypeError("Expecting a tuple of Coefficient or AssembledVectors (not a %r)" %
+                            type(function))
+
+    @cached_property
+    def form(self):
+        return self._function
+
+    @cached_property
+    def arg_function_spaces(self):
+        """Returns a tuple of function spaces that the tensor
+        is defined on.
+        """
+        return tuple(f.ufl_function_space() for f in self._function)
+
+    @cached_property
+    def _argument(self):
+        """Generates a 'test function' associated with this class."""
+        from firedrake.ufl_expr import TestFunction
+        return tuple(TestFunction(fs) for fs in self.arg_function_spaces)
+
+    def arguments(self):
+        """Returns a tuple of arguments associated with the tensor."""
+        return self._argument
+
+    def coefficients(self):
+        """Returns a tuple of coefficients associated with the tensor."""
+        return self._function
+
+    def ufl_domains(self):
+        """Returns the integration domains of the integrals associated with
+        the tensor.
+        """
+        return (domain for fs in self.arg_function_spaces for domain in fs.ufl_domains())
+
+    def subdomain_data(self):
+        """Returns a mapping on the tensor:
+        ``{domain:{integral_type: subdomain_data}}``.
+        """
+        return tuple({domain: {"cell": None}} for domain in self.ufl_domain())
 
     def _output_string(self, prec=None):
         """Creates a string representation of the tensor."""

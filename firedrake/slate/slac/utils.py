@@ -167,6 +167,7 @@ def _slate2gem(expr, self):
 
 @_slate2gem.register(sl.Tensor)
 @_slate2gem.register(sl.AssembledVector)
+@_slate2gem.register(sl.BlockAssembledVector)
 def _slate2gem_tensor(expr, self):
     shape = expr.shape if not len(expr.shape) == 0 else (1, )
     name = f"T{len(self.var2terminal)}"
@@ -290,10 +291,12 @@ def merge_loopy(slate_loopy, output_arg, builder, var2terminal, name):
     # In the initialisation the loopy tensors for the terminals are generated
     # Those are the needed again for generating the TSFC calls
     inits, tensor2temp = builder.initialise_terminals(var2terminal, builder.bag.coefficients)
-    terminal_tensors = list(filter(lambda x: (x.terminal and not isinstance(x, sl.AssembledVector)), var2terminal.values()))
-    tsfc_calls, tsfc_kernels = zip(*itertools.chain.from_iterable(
-                                   (builder.generate_tsfc_calls(terminal, tensor2temp[terminal])
-                                    for terminal in terminal_tensors)))
+    terminal_tensors = list(filter(lambda x: (x.terminal and not x.assembled), var2terminal.values()))
+    tsfc_calls, tsfc_kernels = [], []
+    if terminal_tensors:
+        tsfc_calls, tsfc_kernels = zip(*itertools.chain.from_iterable(
+                                    (builder.generate_tsfc_calls(terminal, tensor2temp[terminal])
+                                        for terminal in terminal_tensors)))
 
     # Construct args
     args = [output_arg] + builder.generate_wrapper_kernel_args(tensor2temp)
